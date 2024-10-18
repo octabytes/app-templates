@@ -1,2 +1,3 @@
-# app-templates
+# App templates
+
 Open source applications template
