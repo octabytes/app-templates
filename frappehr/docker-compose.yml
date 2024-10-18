@@ -200,23 +200,23 @@ volumes:
     driver: local
     driver_opts:
       type: none
-      device: ${PWD}/db-data
+      device: /home/axeemhaider/app-templates/frappehr/db-data
       o: bind
   redis-queue-data:
     driver: local
     driver_opts:
       type: none
-      device: ${PWD}/redis-queue-data
+      device: /home/axeemhaider/app-templates/frappehr/redis-queue-data
       o: bind
   redis-cache-data:
     driver: local
     driver_opts:
       type: none
-      device: ${PWD}/redis-cache-data
+      device: /home/axeemhaider/app-templates/frappehr/redis-cache-data
       o: bind
   redis-socketio-data:
     driver: local
     driver_opts:
       type: none
-      device: ${PWD}/redis-socketio-data
+      device: /home/axeemhaider/app-templates/frappehr/redis-socketio-data
       o: bind
