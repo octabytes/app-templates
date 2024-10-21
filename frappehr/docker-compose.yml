@@ -1,6 +1,26 @@
 version: "3"
 
 services:
+  traefik:
+    image: traefik:v2.10 # Latest version of Traefik
+    restart: always
+    command:
+      - "--providers.docker=true" # Enable Docker as a provider
+      - "--entrypoints.web.address=:80" # Entry point for HTTP traffic
+      - "--entrypoints.websecure.address=:443" # Entry point for HTTPS traffic (optional)
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true" # Enable TLS challenge (optional for HTTPS)
+      - "--certificatesresolvers.myresolver.acme.email=your-email@example.com" # Email for SSL certs (optional)
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json" # Path to store certs (optional)
+    ports:
+      - "80:80" # Traefik listening on port 80
+      - "443:443" # Traefik listening on port 443 (for HTTPS)
+      - "8080:8080" # Traefik Dashboard
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro" # To interact with Docker
+      - "./letsencrypt:/letsencrypt" # For SSL certificate storage (optional)
+    networks:
+      - web
+
   backend:
     image: elestio/erpnext:${SOFTWARE_VERSION_TAG}
     restart: always
@@ -100,8 +120,11 @@ services:
     volumes:
       - ./sites:/home/frappe/frappe-bench/sites
       - ./logs:/home/frappe/frappe-bench/logs
-    ports:
-      - "172.17.0.1:32755:8080"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`${SERVICE_DOMAIN}`)"
+    networks:
+      - web
 
   queue-default:
     image: elestio/erpnext:${SOFTWARE_VERSION_TAG}
@@ -220,3 +243,7 @@ volumes:
       type: none
       device: /opt/app/redis-socketio-data
       o: bind
+
+networks:
+  web:
+    external: true
