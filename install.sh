@@ -10,7 +10,7 @@ cat <<'EOF'
                            |___/         
 EOF
 
-echo "VERSION 1.1"
+echo "VERSION 1.2"
 
 # Set environment variables
 DOMAIN="vm.octabyte.io"
@@ -134,7 +134,6 @@ generate_random_password() {
 
 # Function to create .env from env.txt
 create_env_file() {
-    echo "Creating .env file from $ENV_TXT_FILE..."
 
     # Check if env.txt exists
     if [[ ! -f "$ENV_TXT_FILE" ]]; then
@@ -151,8 +150,6 @@ create_env_file() {
 
     # Read from env.txt and process each line
     while IFS= read -r line; do
-        # Debugging information
-        echo "Processing line: $line"
 
         # Replace RANDOM_PASSWORD with a generated password
         if [[ "$line" == *"RANDOM_PASSWORD"* ]]; then
@@ -217,6 +214,8 @@ display_web_info() {
     done < "$WEB_FILE"
     echo "---------------------------------------------"
 }
+
+display_web_info
 
 # ASCII Art for "Congratulations"
 cat <<'EOF'
