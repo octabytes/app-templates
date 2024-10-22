@@ -144,10 +144,17 @@ create_env_file() {
     fi
 
     # Create or clear the .env file
-    sudo tee "$ENV_FILE" > /dev/null 2>&1 || { echo "Failed to create .env file. Check permissions."; return 1; }
+    echo "" | sudo tee "$ENV_FILE" > /dev/null  # Clear the existing .env file or create a new one
+    if [[ $? -ne 0 ]]; then
+        echo "Failed to create .env file. Check permissions."
+        return 1
+    fi
 
     # Read from env.txt and process each line
     while IFS= read -r line; do
+        # Debugging information
+        echo "Processing line: $line"
+
         # Replace RANDOM_PASSWORD with a generated password
         if [[ "$line" == *"RANDOM_PASSWORD"* ]]; then
             password=$(generate_random_password)
@@ -158,7 +165,11 @@ create_env_file() {
         line=$(eval echo "$line")  # This will evaluate any variable in the line
 
         # Append to .env file with error handling
-        echo "$line" | sudo tee -a "$ENV_FILE" > /dev/null 2>&1 || { echo "Failed to write to .env file. Check permissions."; return 1; }
+        echo "$line" | sudo tee -a "$ENV_FILE" > /dev/null
+        if [[ $? -ne 0 ]]; then
+            echo "Failed to write to .env file. Check permissions."
+            return 1
+        fi
     done < "$ENV_TXT_FILE"
 
     # Attempt to remove env.txt, handle errors
@@ -168,7 +179,6 @@ create_env_file() {
 
     echo ".env file created successfully."
 }
-
 
 # Call the function to create the .env file
 create_env_file
