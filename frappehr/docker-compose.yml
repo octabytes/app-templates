@@ -122,7 +122,11 @@ services:
       - ./logs:/home/frappe/frappe-bench/logs
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=Host(`${APP_URL}`)"
+      - "traefik.http.routers.frontend-ip.rule=Host(`34.45.42.215`)"
+      - "traefik.http.routers.frontend-domain.rule=Host(`${APP_URL}`)"
+      - "traefik.http.services.frontend.loadbalancer.server.port=8080"
+      - "traefik.http.routers.frontend-ip.entrypoints=web"
+      - "traefik.http.routers.frontend-domain.entrypoints=web"
     networks:
       - web
 
