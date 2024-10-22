@@ -135,6 +135,8 @@ generate_random_password() {
 
 # Function to create .env from env.txt
 create_env_file() {
+    echo "Creating .env file from $ENV_TXT_FILE..."
+
     # Check if env.txt exists
     if [[ ! -f "$ENV_TXT_FILE" ]]; then
         echo "Error: $ENV_TXT_FILE not found!"
@@ -142,7 +144,7 @@ create_env_file() {
     fi
 
     # Create or clear the .env file
-    sudo tee "$ENV_FILE" > /dev/null
+    sudo tee "$ENV_FILE" > /dev/null 2>&1 || { echo "Failed to create .env file. Check permissions."; return 1; }
 
     # Read from env.txt and process each line
     while IFS= read -r line; do
@@ -154,11 +156,15 @@ create_env_file() {
         
         # Replace placeholders with actual values
         line=$(eval echo "$line")  # This will evaluate any variable in the line
-        echo "$line" | sudo tee -a "$ENV_FILE" > /dev/null  # Append to .env
+
+        # Append to .env file with error handling
+        echo "$line" | sudo tee -a "$ENV_FILE" > /dev/null 2>&1 || { echo "Failed to write to .env file. Check permissions."; return 1; }
     done < "$ENV_TXT_FILE"
 
-    # Remove env.txt after processing
-    sudo rm -f "$ENV_TXT_FILE"
+    # Attempt to remove env.txt, handle errors
+    if ! sudo rm -f "$ENV_TXT_FILE"; then
+        echo "Warning: Unable to remove $ENV_TXT_FILE. Check permissions."
+    fi
 
     echo ".env file created successfully."
 }
