@@ -10,6 +10,8 @@ cat <<'EOF'
                            |___/         
 EOF
 
+echo "VERSION 1.0"
+
 # Set environment variables
 DOMAIN="vm.octabyte.io"
 CDN="https://github.com/octabytes/app-templates/blob/main"
