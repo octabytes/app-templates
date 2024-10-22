@@ -10,7 +10,7 @@ cat <<'EOF'
                            |___/         
 EOF
 
-echo "VERSION 1.4"
+echo "VERSION 1.5"
 
 # Set environment variables
 DOMAIN="vm.octabyte.io"
@@ -191,11 +191,25 @@ else
     echo "Warning: preInstall.sh script not found!"
 fi
 
+# Create a Docker network for traefik
+docker network create web
+
 # Run docker-compose.yml
 DOCKER_COMPOSE_FILE="/opt/app/docker-compose.yml"
+
 if [ -f "$DOCKER_COMPOSE_FILE" ]; then
     echo "Running Docker Compose..."
-    sudo docker-compose -f "$DOCKER_COMPOSE_FILE" up -d
+
+    if command -v docker-compose &> /dev/null; then
+        # Run with standalone docker-compose
+        sudo docker-compose -f "$DOCKER_COMPOSE_FILE" up -d
+    elif command -v docker &> /dev/null && docker compose version &> /dev/null; then
+        # Run with docker compose (plugin)
+        sudo docker compose -f "$DOCKER_COMPOSE_FILE" up -d
+    else
+        echo "Error: Docker Compose not found. Please install it."
+        exit 1
+    fi
 else
     echo "Warning: docker-compose.yml not found!"
 fi
