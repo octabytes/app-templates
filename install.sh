@@ -76,16 +76,16 @@ then
     # Configure Docker to limit log size
     echo "Configuring Docker log limits..."
     sudo mkdir -p /etc/docker
-    # cat <<EOF | sudo tee /etc/docker/daemon.json
-    # {
-    #     "log-driver": "json-file",
-    #     "log-opts": {
-    #         "max-size": "10m",
-    #         "max-file": "3"
-    #     },
-    #     "storage-driver": "overlay2"
-    # }
-    # EOF
+    cat <<EOF | sudo tee /etc/docker/daemon.json
+    {
+        "log-driver": "json-file",
+        "log-opts": {
+            "max-size": "10m",
+            "max-file": "3"
+        },
+        "storage-driver": "overlay2"
+    }
+    EOF
 
     # Restart Docker to apply configurations
     sudo systemctl restart docker
