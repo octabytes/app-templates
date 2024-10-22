@@ -8,8 +8,9 @@ services:
       - "--providers.docker=true" # Enable Docker as a provider
       - "--entrypoints.web.address=:80" # Entry point for HTTP traffic
       - "--entrypoints.websecure.address=:443" # Entry point for HTTPS traffic (optional)
+      - "--providers.docker.exposedByDefault=false" # Disable exposing services by default
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true" # Enable TLS challenge (optional for HTTPS)
-      - "--certificatesresolvers.myresolver.acme.email=your-email@example.com" # Email for SSL certs (optional)
+      - "--certificatesresolvers.myresolver.acme.email=support@octabyte.io" # Email for SSL certs (optional)
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json" # Path to store certs (optional)
     ports:
       - "80:80" # Traefik listening on port 80
@@ -119,9 +120,10 @@ services:
       - ./logs:/home/frappe/frappe-bench/logs
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.frontend-ip.rule=Host(`34.55.59.236`)"
-      - "traefik.http.routers.frontend-domain.rule=Host(`${APP_URL}`)"
+      - "traefik.http.routers.frontend.rule=Host(`${APP_URL}`)"
       - "traefik.http.services.frontend.loadbalancer.server.port=8080"
+      - "traefik.http.routers.frontend.tls.certresolver=myresolver"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
 
   queue-default:
     image: elestio/erpnext:${SOFTWARE_VERSION_TAG}
