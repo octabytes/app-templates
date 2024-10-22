@@ -142,7 +142,7 @@ create_env_file() {
     fi
 
     # Create or clear the .env file
-    echo "" | sudo tee "$ENV_FILE" > /dev/null  # Clear the existing .env file or create a new one
+    echo "" | sudo tee "$ENV_FILE" > /dev/null
     if [[ $? -ne 0 ]]; then
         echo "Failed to create .env file. Check permissions."
         return 1
@@ -150,15 +150,32 @@ create_env_file() {
 
     # Read from env.txt and process each line
     while IFS= read -r line; do
+        # Skip blank lines
+        if [[ -z "$line" ]]; then
+            continue
+        fi
+
+        # Handle comments directly
+        if [[ "$line" =~ ^# ]]; then
+            echo "$line" | sudo tee -a "$ENV_FILE" > /dev/null
+            continue
+        fi
 
         # Replace RANDOM_PASSWORD with a generated password
         if [[ "$line" == *"RANDOM_PASSWORD"* ]]; then
             password=$(generate_random_password)
-            line=${line//RANDOM_PASSWORD/$password}  # Replace RANDOM_PASSWORD with the generated password
+            line=${line//RANDOM_PASSWORD/$password}
         fi
-        
-        # Replace placeholders with actual values
-        line=$(eval echo "$line")  # This will evaluate any variable in the line
+
+        # Check if line contains special characters (<, >, &, etc.)
+        if [[ "$line" =~ [\<\>\&\'\"\`] ]]; then
+            # Append the line without using eval
+            echo "$line" | sudo tee -a "$ENV_FILE" > /dev/null
+            continue
+        fi
+
+        # Replace placeholders with actual values using eval only for safe lines
+        line=$(eval echo "$line")
 
         # Append to .env file with error handling
         echo "$line" | sudo tee -a "$ENV_FILE" > /dev/null
