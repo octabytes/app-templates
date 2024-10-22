@@ -29,32 +29,32 @@ OS=$(lsb_release -is 2>/dev/null || grep '^ID=' /etc/os-release | cut -d= -f2 | 
 install_docker_ubuntu() {
     echo "Detected OS: Ubuntu. Installing Docker for Ubuntu..."
     
-    apt update
-    apt install -y apt-transport-https ca-certificates curl software-properties-common
+    sudo apt update
+    sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
 
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
 
     echo \
     "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
-    | tee /etc/apt/sources.list.d/docker.list > /dev/null
+    | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-    apt update
-    apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    sudo apt update
+    sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 }
 
 # Docker installation function for Debian
 install_docker_debian() {
     echo "Detected OS: Debian. Installing Docker for Debian..."
 
-    mkdir -p /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    sudo mkdir -p /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
     echo \
     "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" \
-    | tee /etc/apt/sources.list.d/docker.list > /dev/null
+    | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-    apt update
-    apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-buildx-plugin
+    sudo apt update
+    sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-buildx-plugin
 }
 
 # Check for Docker installation and install based on OS
@@ -73,8 +73,8 @@ then
 
     # Configure Docker to limit log size
     echo "Configuring Docker log limits..."
-    mkdir -p /etc/docker
-    # cat <<EOF | tee /etc/docker/daemon.json
+    sudo mkdir -p /etc/docker
+    # cat <<EOF | sudo tee /etc/docker/daemon.json
     # {
     #     "log-driver": "json-file",
     #     "log-opts": {
@@ -86,7 +86,7 @@ then
     # EOF
 
     # Restart Docker to apply configurations
-    systemctl restart docker
+    sudo systemctl restart docker
 
     echo "Docker setup complete."
 
@@ -97,8 +97,8 @@ fi
 # Check if Git is installed, if not, install it
 if ! command -v git &> /dev/null; then
     echo "Git not found. Installing Git..."
-    apt update
-    apt install -y git
+    sudo apt update
+    sudo apt install -y git
 else
     echo "Git is already installed. Skipping installation."
 fi
@@ -115,8 +115,8 @@ if [ ! -d "$SERVICE_FOLDER" ]; then
 fi
 
 echo "Setting up service..."
-mkdir -p /opt/app
-cp -r "$SERVICE_FOLDER/." /opt/app/
+sudo mkdir -p /opt/app
+sudo cp -r "$SERVICE_FOLDER/." /opt/app/
 rm -rf /tmp/app-templates  # Clean up the cloned repo
 
 # Generate .env file based on the "environments" key in config.yml
@@ -144,7 +144,7 @@ create_env_file() {
     fi
 
     # Create or clear the .env file
-    tee "$ENV_FILE" > /dev/null 2>&1 || { echo "Failed to create .env file. Check permissions."; return 1; }
+    sudo tee "$ENV_FILE" > /dev/null 2>&1 || { echo "Failed to create .env file. Check permissions."; return 1; }
 
     # Read from env.txt and process each line
     while IFS= read -r line; do
@@ -158,11 +158,11 @@ create_env_file() {
         line=$(eval echo "$line")  # This will evaluate any variable in the line
 
         # Append to .env file with error handling
-        echo "$line" | tee -a "$ENV_FILE" > /dev/null 2>&1 || { echo "Failed to write to .env file. Check permissions."; return 1; }
+        echo "$line" | sudo tee -a "$ENV_FILE" > /dev/null 2>&1 || { echo "Failed to write to .env file. Check permissions."; return 1; }
     done < "$ENV_TXT_FILE"
 
     # Attempt to remove env.txt, handle errors
-    if ! rm -f "$ENV_TXT_FILE"; then
+    if ! sudo rm -f "$ENV_TXT_FILE"; then
         echo "Warning: Unable to remove $ENV_TXT_FILE. Check permissions."
     fi
 
@@ -189,7 +189,7 @@ fi
 DOCKER_COMPOSE_FILE="/opt/app/docker-compose.yml"
 if [ -f "$DOCKER_COMPOSE_FILE" ]; then
     echo "Running Docker Compose..."
-    docker-compose -f "$DOCKER_COMPOSE_FILE" up -d
+    sudo docker-compose -f "$DOCKER_COMPOSE_FILE" up -d
 else
     echo "Warning: docker-compose.yml not found!"
 fi
