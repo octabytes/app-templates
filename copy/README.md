@@ -10,3 +10,4 @@ Copy new open source application `docker-compose.yml` and other config files. An
 4. Go to `/opt/app` and copy scripts if any
 5. Copy `name.yml` and convert into `web.txt` if any, other wise get detail from email
 6. Add Traefik to `docker-compose.yml`
+7. Add `APP_URL=$SERVICE_DOMAIN` in `env.txt`
