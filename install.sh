@@ -10,7 +10,7 @@ cat <<'EOF'
                            |___/         
 EOF
 
-echo "VERSION 1.3"
+echo "VERSION 1.4"
 
 # Set environment variables
 DOMAIN="vm.octabyte.io"
@@ -205,6 +205,14 @@ WEB_FILE="/opt/app/web.txt"
 
 # Function to display the information in a table format
 display_web_info() {
+    # Load environment variables from the .env file
+    if [[ -f $ENV_FILE ]]; then
+        export $(grep -v '^#' "$ENV_FILE" | xargs)
+    else
+        echo "Error: .env file not found!"
+        exit 1
+    fi
+
     echo "---------------------------------------------"
     while IFS= read -r line; do
         # Use eval to expand the variables
