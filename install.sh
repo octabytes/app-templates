@@ -70,32 +70,38 @@ then
         echo "Unsupported OS: $OS. Exiting."
         exit 1
     fi
+
+    # Configure Docker to limit log size
+    echo "Configuring Docker log limits..."
+    sudo mkdir -p /etc/docker
+    # cat <<EOF | sudo tee /etc/docker/daemon.json
+    # {
+    #     "log-driver": "json-file",
+    #     "log-opts": {
+    #         "max-size": "10m",
+    #         "max-file": "3"
+    #     },
+    #     "storage-driver": "overlay2"
+    # }
+    # EOF
+
+    # Restart Docker to apply configurations
+    sudo systemctl restart docker
+
+    echo "Docker setup complete."
+
 else
     echo "Docker is already installed."
 fi
 
-# Configure Docker to limit log size
-echo "Configuring Docker log limits..."
-sudo mkdir -p /etc/docker
-cat <<EOF | sudo tee /etc/docker/daemon.json
-{
-    "log-driver": "json-file",
-    "log-opts": {
-        "max-size": "10m",
-        "max-file": "3"
-    },
-    "storage-driver": "overlay2"
-}
-EOF
-
-# Restart Docker to apply configurations
-sudo systemctl restart docker
-
-echo "Docker setup complete."
-
-# Install Git
-echo "Installing git..."
-sudo apt install git
+# Check if Git is installed, if not, install it
+if ! command -v git &> /dev/null; then
+    echo "Git not found. Installing Git..."
+    sudo apt update
+    sudo apt install -y git
+else
+    echo "Git is already installed. Skipping installation."
+fi
 
 # Clone the repository
 echo "Cloning repository..."
@@ -118,6 +124,9 @@ CONFIG_FILE="/opt/app/config.yml"
 ENV_FILE="/opt/app/.env"
 
 echo "Creating .env file from config.yml..."
+
+# Create or clear the .env file with sudo
+sudo sh -c "echo '' > $ENV_FILE"
 
 # Function to generate random password
 generate_random_password() {
@@ -148,7 +157,7 @@ parse_env_file() {
                     ;;
             esac
             # Write to .env file
-            echo "$key=$value" >> $ENV_FILE
+            echo "$key=$value" | sudo tee -a $ENV_FILE > /dev/null
         fi
     done < $CONFIG_FILE
 }
