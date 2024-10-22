@@ -155,8 +155,12 @@ parse_env_file() {
         # Process lines in the environments section
         if $in_env_section && [[ "$line" =~ "-" ]]; then
             # Extract key and value
-            key=$(echo "$line" | awk -F: '{gsub(/ /, "", $1); print $2}' | sed 's/^ *- *//')  # Clean key
+            key=$(echo "$line" | awk -F: '{gsub(/ /, "", $1); print $1}' | sed 's/^ *- *//')  # Clean key
             value=$(echo "$line" | awk -F: '{gsub(/ /, "", $1); print $2}')  # Clean value
+
+            # Remove quotes from key and value
+            key=$(echo "$key" | tr -d '"')
+            value=$(echo "$value" | tr -d '"')
 
             # If value is "random_password", generate a random one
             if [[ "$value" == "random_password" ]]; then
@@ -177,12 +181,15 @@ parse_env_file() {
             esac
             
             # Write to .env file, ensuring keys are not prefixed with '-'
-            echo "$key=$value" | sudo tee -a $ENV_FILE > /dev/null
+            echo "$key=$value" | sudo tee -a "$ENV_FILE" > /dev/null
         fi
     done < "$CONFIG_FILE"
 }
 
 parse_env_file
+
+# Move to app directory
+cd /opt/app
 
 # Execute the pre-install script
 PRE_INSTALL_SCRIPT="/opt/app/scripts/preInstall.sh"
