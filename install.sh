@@ -136,14 +136,33 @@ generate_random_password() {
 # Parse YAML environments section and generate the .env file
 YAML_KEY="environments"
 parse_env_file() {
+    in_env_section=false
+
     while IFS= read -r line; do
-        if [[ "$line" =~ "-" ]]; then
-            key=$(echo "$line" | awk -F: '{gsub(/ /, "", $1); print $1}')
-            value=$(echo "$line" | awk -F: '{gsub(/ /, "", $2); print $2}')
+        # Check if we're in the environments section
+        if [[ "$line" =~ $YAML_KEY ]]; then
+            in_env_section=true
+            continue
+        fi
+        
+        # If we reach the next section (or the end), stop reading
+        if [[ "$line" =~ ^[[:alnum:]] ]]; then
+            if $in_env_section; then
+                break
+            fi
+        fi
+
+        # Process lines in the environments section
+        if $in_env_section && [[ "$line" =~ "-" ]]; then
+            # Extract key and value
+            key=$(echo "$line" | awk -F: '{gsub(/ /, "", $1); print $2}' | sed 's/^ *- *//')  # Clean key
+            value=$(echo "$line" | awk -F: '{gsub(/ /, "", $1); print $2}')  # Clean value
+
             # If value is "random_password", generate a random one
-            if [ "$value" == "random_password" ]; then
+            if [[ "$value" == "random_password" ]]; then
                 value=$(generate_random_password)
             fi
+            
             # Replace placeholders with real values
             case $value in
                 "[SERVICE_EMAIL]")
@@ -153,13 +172,14 @@ parse_env_file() {
                     value="$SERVICE_DOMAIN"
                     ;;
                 "[DOMAIN]")
-                    value="$SERVICE_SUBDOMAIN"
+                    value="$DOMAIN"  # Assuming DOMAIN is already defined
                     ;;
             esac
-            # Write to .env file
+            
+            # Write to .env file, ensuring keys are not prefixed with '-'
             echo "$key=$value" | sudo tee -a $ENV_FILE > /dev/null
         fi
-    done < $CONFIG_FILE
+    done < "$CONFIG_FILE"
 }
 
 parse_env_file
