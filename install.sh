@@ -191,9 +191,6 @@ else
     echo "Warning: preInstall.sh script not found!"
 fi
 
-# Create a Docker network for traefik
-sudo docker network create web
-
 # Run docker-compose.yml
 DOCKER_COMPOSE_FILE="/opt/app/docker-compose.yml"
 

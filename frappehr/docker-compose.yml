@@ -2,7 +2,7 @@ version: "3"
 
 services:
   traefik:
-    image: traefik:v2.10 # Latest version of Traefik
+    image: traefik:v3.1
     restart: always
     command:
       - "--providers.docker=true" # Enable Docker as a provider
@@ -14,7 +14,6 @@ services:
     ports:
       - "80:80" # Traefik listening on port 80
       - "443:443" # Traefik listening on port 443 (for HTTPS)
-      - "8080:8080" # Traefik Dashboard
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro" # To interact with Docker
       - "./letsencrypt:/letsencrypt" # For SSL certificate storage (optional)
@@ -121,10 +120,8 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.frontend-ip.rule=Host(`34.45.42.215`)"
-      - "traefik.http.routers.frontend-domain.rule=Host(`test.vm.octabyte.io`)"
+      - "traefik.http.routers.frontend-domain.rule=Host(`${APP_URL}`)"
       - "traefik.http.services.frontend.loadbalancer.server.port=8080"
-      - "traefik.http.routers.frontend-ip.entrypoints=web"
-      - "traefik.http.routers.frontend-domain.entrypoints=web"
 
   queue-default:
     image: elestio/erpnext:${SOFTWARE_VERSION_TAG}
