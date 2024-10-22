@@ -158,7 +158,7 @@ create_env_file() {
     done < "$ENV_TXT_FILE"
 
     # Remove env.txt after processing
-    rm -f "$ENV_TXT_FILE"
+    sudo rm -f "$ENV_TXT_FILE"
 
     echo ".env file created successfully."
 }
