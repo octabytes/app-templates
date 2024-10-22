@@ -10,7 +10,7 @@ cat <<'EOF'
                            |___/         
 EOF
 
-echo "VERSION 1.2"
+echo "VERSION 1.3"
 
 # Set environment variables
 DOMAIN="vm.octabyte.io"
@@ -208,7 +208,7 @@ display_web_info() {
     echo "---------------------------------------------"
     while IFS= read -r line; do
         # Use eval to expand the variables
-        eval "echo \$line" | while IFS='=' read -r key value; do
+        eval "echo \"$line\"" | while IFS='=' read -r key value; do
             printf "| %-15s | %s\n" "$key" "$value"
         done
     done < "$WEB_FILE"
