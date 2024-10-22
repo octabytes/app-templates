@@ -122,7 +122,7 @@ services:
       - ./logs:/home/frappe/frappe-bench/logs
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=Host(`${SERVICE_DOMAIN}`)"
+      - "traefik.http.routers.frontend.rule=Host(`${APP_URL}`)"
     networks:
       - web
 

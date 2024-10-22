@@ -10,7 +10,7 @@ cat <<'EOF'
                            |___/         
 EOF
 
-echo "VERSION 1.5"
+echo "VERSION 1.6"
 
 # Set environment variables
 DOMAIN="vm.octabyte.io"
@@ -192,7 +192,7 @@ else
 fi
 
 # Create a Docker network for traefik
-docker network create web
+sudo docker network create web
 
 # Run docker-compose.yml
 DOCKER_COMPOSE_FILE="/opt/app/docker-compose.yml"
