@@ -1,4 +1,4 @@
-URL=$SERVICE_DOMAIN
+URL=https://$SERVICE_DOMAIN
 Label=ERPNext Admin
 Login=Administrator
 Password=$ADMIN_PASSWORD

@@ -10,7 +10,7 @@ cat <<'EOF'
                            |___/         
 EOF
 
-echo "VERSION 1.0"
+echo "VERSION 1.1"
 
 # Set environment variables
 DOMAIN="vm.octabyte.io"
@@ -121,9 +121,6 @@ sudo mkdir -p /opt/app
 sudo cp -r "$SERVICE_FOLDER/." /opt/app/
 rm -rf /tmp/app-templates  # Clean up the cloned repo
 
-# Generate .env file based on the "environments" key in config.yml
-CONFIG_FILE="/opt/app/config.yml"
-
 echo "Creating .env file from env.txt..."
 
 # Define env.txt and .env file paths
@@ -206,73 +203,20 @@ else
     echo "Warning: docker-compose.yml not found!"
 fi
 
-# Read the "webUI" key from config.yml and display relevant information in table format
-echo "Fetching service setup information..."
+# Define the location of your web.txt file
+WEB_FILE="/opt/app/web.txt"
 
-show_web_ui_info() {
-    local key value inside_webui_section=false
-
-    # Output header for the table
+# Function to display the information in a table format
+display_web_info() {
     echo "---------------------------------------------"
-
-    # Iterate through the config.yml file
     while IFS= read -r line; do
-        # Detect the start of the webUI section
-        if [[ "$line" =~ "webUI:" ]]; then
-            inside_webui_section=true
-            continue
-        fi
-
-        # Stop processing once out of the webUI section
-        if [[ $inside_webui_section == true && ! "$line" =~ "-" ]]; then
-            break
-        fi
-
-        # Process each key-value pair in the webUI section
-        if [[ "$inside_webui_section" == true && "$line" =~ "-" ]]; then
-            key=$(echo "$line" | awk -F: '{gsub(/ /, "", $1); print $1}')
-            value=$(echo "$line" | awk -F: '{gsub(/ /, "", $2); print $2}')
-
-            # Replace placeholders with actual values
-            case $value in
-                "[SERVICE_DOMAIN]")
-                    value="$SERVICE_DOMAIN"
-                    ;;
-                "[SERVICE_EMAIL]")
-                    value="$SERVICE_EMAIL"
-                    ;;
-                "[ADMIN_PASSWORD]")
-                    value=$(grep 'ADMIN_PASSWORD' $ENV_FILE | cut -d '=' -f 2)
-                    ;;
-            esac
-
-            # Dynamically display each available field
-            case $key in
-                "label")
-                    echo "| Service         | $value"
-                    ;;
-                "url")
-                    echo "| URL             | $value"
-                    ;;
-                "login")
-                    echo "| Login           | $value"
-                    ;;
-                "email")
-                    echo "| Email           | $value"
-                    ;;
-                "password")
-                    echo "| Password        | $value"
-                    ;;
-            esac
-        fi
-    done < $CONFIG_FILE
-
-    # Output footer for the table
+        # Use eval to expand the variables
+        eval "echo \$line" | while IFS='=' read -r key value; do
+            printf "| %-15s | %s\n" "$key" "$value"
+        done
+    done < "$WEB_FILE"
     echo "---------------------------------------------"
-    echo
 }
-
-show_web_ui_info
 
 # ASCII Art for "Congratulations"
 cat <<'EOF'
