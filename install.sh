@@ -155,14 +155,15 @@ parse_env_file() {
         # Process lines in the environments section
         if $in_env_section && [[ "$line" =~ "-" ]]; then
             # Extract key and value
-            key=$(echo "$line" | awk -F: '{gsub(/ /, "", $1); print $2}' | sed 's/^ *- *//')  # Clean key
-            value=$(echo "$line" | awk -F: '{gsub(/ /, "", $1); print $2}')  # Clean value
+            key=$(echo "$line" | awk -F: '{gsub(/ /, "", $1); print $1}' | sed 's/^ *- *//')  # Clean key
+            value=$(echo "$line" | awk -F: '{gsub(/ /, "", $2); print $2}')  # Clean value
 
             # If value is "random_password", generate a random one
             if [[ "$value" == "random_password" ]]; then
                 value=$(generate_random_password)
             fi
 
+            echo $key
             echo $value
             
             # Replace placeholders with real values
