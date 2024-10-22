@@ -19,6 +19,14 @@ read -p "Enter Service Name: " SERVICE_NAME
 read -p "Enter Service Domain (prefix for $DOMAIN): " SERVICE_SUBDOMAIN
 read -p "Enter Service Admin Email: " SERVICE_EMAIL
 
+echo $DOMAIN
+echo $CDN
+echo $SERVICE_NAME
+echo $SERVICE_SUBDOMAIN
+echo $SERVICE_EMAIL
+
+exit 1
+
 # Create the full service domain
 SERVICE_DOMAIN="$SERVICE_SUBDOMAIN.$DOMAIN"
 
