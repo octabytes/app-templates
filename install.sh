@@ -121,74 +121,50 @@ rm -rf /tmp/app-templates  # Clean up the cloned repo
 
 # Generate .env file based on the "environments" key in config.yml
 CONFIG_FILE="/opt/app/config.yml"
+
+echo "Creating .env file from env.txt..."
+
+# Define env.txt and .env file paths
 ENV_FILE="/opt/app/.env"
-
-echo "Creating .env file from config.yml..."
-
-# Create or clear the .env file with sudo
-sudo sh -c "echo '' > $ENV_FILE"
+ENV_TXT_FILE="/opt/app/env.txt"
 
 # Function to generate random password
 generate_random_password() {
     echo $(openssl rand -base64 12)
 }
 
-# Parse YAML environments section and generate the .env file
-YAML_KEY="environments"
-parse_env_file() {
-    in_env_section=false
+# Function to create .env from env.txt
+create_env_file() {
+    # Check if env.txt exists
+    if [[ ! -f "$ENV_TXT_FILE" ]]; then
+        echo "Error: $ENV_TXT_FILE not found!"
+        return 1
+    fi
 
+    # Create or clear the .env file
+    sudo tee "$ENV_FILE" > /dev/null
+
+    # Read from env.txt and process each line
     while IFS= read -r line; do
-        # Check if we're in the environments section
-        if [[ "$line" =~ $YAML_KEY ]]; then
-            in_env_section=true
-            continue
+        # Replace RANDOM_PASSWORD with a generated password
+        if [[ "$line" == *"RANDOM_PASSWORD"* ]]; then
+            password=$(generate_random_password)
+            line=${line//RANDOM_PASSWORD/$password}  # Replace RANDOM_PASSWORD with the generated password
         fi
         
-        # If we reach the next section (or the end), stop reading
-        if [[ "$line" =~ ^[[:alnum:]] ]]; then
-            if $in_env_section; then
-                break
-            fi
-        fi
+        # Replace placeholders with actual values
+        line=$(eval echo "$line")  # This will evaluate any variable in the line
+        echo "$line" | sudo tee -a "$ENV_FILE" > /dev/null  # Append to .env
+    done < "$ENV_TXT_FILE"
 
-        # Process lines in the environments section
-        if $in_env_section && [[ "$line" =~ "-" ]]; then
+    # Remove env.txt after processing
+    rm -f "$ENV_TXT_FILE"
 
-            echo $line
-            # Extract key and value
-            key=$(echo "$line" | awk -F: '{gsub(/ /, "", $2); print $2}' | sed 's/^ *- *//')  # Clean key
-            value=$(echo "$line" | awk -F: '{gsub(/ /, "", $2); print $2}')  # Clean value
-
-            # If value is "random_password", generate a random one
-            if [[ "$value" == "random_password" ]]; then
-                value=$(generate_random_password)
-            fi
-            
-            # Replace placeholders with real values
-            case $value in
-                "[SERVICE_EMAIL]")
-                    value="$SERVICE_EMAIL"
-                    ;;
-                "[SERVICE_DOMAIN]")
-                    value="$SERVICE_DOMAIN"
-                    ;;
-                "[DOMAIN]")
-                    value="$DOMAIN"  # Assuming DOMAIN is already defined
-                    ;;
-            esac
-
-            # Remove quotes from key and value
-            key=$(echo "$key" | tr -d '"')
-            value=$(echo "$value" | tr -d '"')
-            
-            # Write to .env file, ensuring keys are not prefixed with '-'
-            echo "$key=$value" | sudo tee -a $ENV_FILE > /dev/null
-        fi
-    done < "$CONFIG_FILE"
+    echo ".env file created successfully."
 }
 
-parse_env_file
+# Call the function to create the .env file
+create_env_file
 
 # Move to app directory
 cd /opt/app
