@@ -1,0 +1,4 @@
+URL=https://$SERVICE_DOMAIN
+Label=Superset
+Login=$ADMIN_EMAIL
+Password=$ADMIN_PASSWORD

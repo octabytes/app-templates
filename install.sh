@@ -132,6 +132,8 @@ generate_random_password() {
     echo $(openssl rand -base64 12)
 }
 
+SOFTWARE_PASSWORD=$(generate_random_password)
+
 # Function to create .env from env.txt
 create_env_file() {
 
