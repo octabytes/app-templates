@@ -190,7 +190,7 @@ cd /opt/app
 PRE_INSTALL_SCRIPT="/opt/app/scripts/preInstall.sh"
 if [ -f "$PRE_INSTALL_SCRIPT" ]; then
     echo "Running pre-install script..."
-    bash "$PRE_INSTALL_SCRIPT"
+    sudo bash "$PRE_INSTALL_SCRIPT"
 else
     echo "Warning: preInstall.sh script not found!"
 fi
