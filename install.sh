@@ -22,50 +22,80 @@ read -p "Enter Service Admin Email: " SERVICE_EMAIL
 # Create the full service domain
 SERVICE_DOMAIN="$SERVICE_SUBDOMAIN.$DOMAIN"
 
-# Check if Docker is installed, if not, install it using best practices for production
-if ! [ -x "$(command -v docker)" ]; then
-    echo "Docker not found. Installing Docker for production..."
+# Detect the OS (Ubuntu or Debian)
+OS=$(lsb_release -is 2>/dev/null || grep '^ID=' /etc/os-release | cut -d= -f2 | tr -d '"')
 
-    # Uninstall any old versions
-    sudo apt-get remove docker docker-engine docker.io containerd runc
+# Docker installation function for Ubuntu
+install_docker_ubuntu() {
+    echo "Detected OS: Ubuntu. Installing Docker for Ubuntu..."
+    
+    sudo apt update
+    sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
 
-    # Set up the Docker repository
-    sudo apt-get update
-    sudo apt-get install \
-        ca-certificates \
-        curl \
-        gnupg \
-        lsb-release
-
-    # Add Docker's official GPG key
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
 
-    # Set up the stable Docker repository
     echo \
-      "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
-      $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+    | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-    # Install Docker Engine
-    sudo apt-get update
-    sudo apt-get install docker-ce docker-ce-cli containerd.io
+    sudo apt update
+    sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+}
 
-    # Verify Docker installation
-    sudo docker --version
+# Docker installation function for Debian
+install_docker_debian() {
+    echo "Detected OS: Debian. Installing Docker for Debian..."
 
-    # Configure Docker log rotation and storage driver to avoid large disk usage
-    sudo mkdir -p /etc/docker
-    echo '{
-      "log-driver": "json-file",
-      "log-opts": {
+    sudo mkdir -p /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+    echo \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" \
+    | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    sudo apt update
+    sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-buildx-plugin
+}
+
+# Check for Docker installation and install based on OS
+if ! command -v docker &> /dev/null
+then
+    echo "Docker not found. Installing Docker..."
+
+    if [[ "$OS" == "Ubuntu" ]]; then
+        install_docker_ubuntu
+    elif [[ "$OS" == "Debian" ]]; then
+        install_docker_debian
+    else
+        echo "Unsupported OS: $OS. Exiting."
+        exit 1
+    fi
+else
+    echo "Docker is already installed."
+fi
+
+# Configure Docker to limit log size
+echo "Configuring Docker log limits..."
+sudo mkdir -p /etc/docker
+cat <<EOF | sudo tee /etc/docker/daemon.json
+{
+    "log-driver": "json-file",
+    "log-opts": {
         "max-size": "10m",
         "max-file": "3"
-      },
-      "storage-driver": "overlay2"
-    }' | sudo tee /etc/docker/daemon.json
+    },
+    "storage-driver": "overlay2"
+}
+EOF
 
-    # Restart Docker to apply new configurations
-    sudo systemctl restart docker
-fi
+# Restart Docker to apply configurations
+sudo systemctl restart docker
+
+echo "Docker setup complete."
+
+# Install Git
+echo "Installing git..."
+sudo apt install git
 
 # Clone the repository
 echo "Cloning repository..."

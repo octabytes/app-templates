@@ -5,5 +5,5 @@ Open source applications template
 ### Install
 
 ```shell
-curl -fsSL https://github.com/octabytes/app-templates/blob/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/octabytes/app-templates/main/install.sh | bash
 ```
