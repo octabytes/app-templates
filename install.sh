@@ -10,7 +10,7 @@ cat <<'EOF'
                            |___/         
 EOF
 
-echo "VERSION 1.7"
+echo "VERSION 1.0"
 
 # Set environment variables
 DOMAIN="vm.octabyte.io"
