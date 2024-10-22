@@ -1,0 +1,9 @@
+Service=Chatwoot
+URL=https://$SERVICE_DOMAIN
+Login=$SERVICE_EMAIL
+Password=$SOFTWARE_PASSWORD
+
+Label=Admin Panel
+URL=https://$SERVICE_DOMAIN/super_admin
+Login=$SERVICE_EMAIL
+Password=$SOFTWARE_PASSWORD
