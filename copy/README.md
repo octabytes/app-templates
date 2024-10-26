@@ -11,3 +11,7 @@ Copy new open source application `docker-compose.yml` and other config files. An
 5. Copy `name.yml` and convert into `web.txt` if any, other wise get detail from email
 6. Add Traefik to `docker-compose.yml`
 7. Add `APP_URL=$SERVICE_DOMAIN` in `env.txt`
+
+## Script file
+
+`https://api.elest.io/api/servers/getCloudInit?token=9BpKvmz0-JSdh-GOFniWtl`

@@ -1,0 +1,482 @@
+#!/bin/bash
+IP=$(ip -o route get to 8.8.8.8 | sed -n 's/.*src ([0-9.]+).*//p')
+## download shared cert and setup renewal
+cat <<EOT >> /opt/renew-vm-cert.sh
+#!/bin/bash
+
+# Function to download a file with retries
+download_with_retry() {
+    local url=\$1
+    local output=\$2
+    local retries=3
+    local delay=5
+
+    for ((i=1; i<=retries; i++)); do
+        if curl -f "\$url" -o "\$output"; then
+            echo "Downloaded \$output successfully"
+            return 0
+        else
+            echo "Failed to download \$output (attempt \$i of \$retries)"
+            sleep \$delay
+        fi
+    done
+
+    echo "Failed to download \$output after \$retries attempts"
+    return 1
+}
+
+# Create the directory if it doesn't exist
+mkdir -p /root/.acme.sh/vm.elestio.app;
+
+# Download the certificate file
+download_with_retry "https://api.elest.io/api/servers/VMCertificateGet?SRVTOKEN=6vvWz49P-ZcY6-6TlEiO3e&mode=cert" "/root/.acme.sh/vm.elestio.app/vm.elestio.app.cer"
+
+# Download the private key file
+download_with_retry "https://api.elest.io/api/servers/VMCertificateGet?SRVTOKEN=6vvWz49P-ZcY6-6TlEiO3e&mode=privkey" "/root/.acme.sh/vm.elestio.app/vm.elestio.app.key"
+
+# Download the full chain file
+download_with_retry "https://api.elest.io/api/servers/VMCertificateGet?SRVTOKEN=6vvWz49P-ZcY6-6TlEiO3e&mode=fullchain" "/root/.acme.sh/vm.elestio.app/fullchain.cer"
+EOT
+
+chmod +x /opt/renew-vm-cert.sh;
+crontab -l | { cat; echo "48 17 * * 0 /opt/renew-vm-cert.sh"; } | crontab -
+/opt/renew-vm-cert.sh
+
+##Allow new fingerprints (needed for borg)
+cat > /root/.ssh/config <<[end]
+StrictHostKeyChecking accept-new
+[end]
+
+#set timezone to UTC
+timedatectl set-timezone UTC
+
+##Add 2GB of SWAP
+if free | awk '/^Swap:/ {exit !$2}'; then
+    echo "Already have SWAP"
+else
+    echo "Adding 2GB of SWAP"
+    sudo fallocate -l 2G /swapfile 
+    sudo chmod 600 /swapfile 
+    sudo mkswap /swapfile 
+    sudo swapon /swapfile 
+    sudo cp /etc/fstab /etc/fstab.bak 
+    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+fi
+
+##Disable password auth (SSH Keys only)
+sed -i 's/#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+
+##accept ssh-rsa (old key format), needed since Ubuntu 22
+echo "PubkeyAcceptedKeyTypes=+ssh-rsa" >> /etc/ssh/sshd_config
+
+service ssh restart
+
+#remove old cron jobs if exist
+crontab -l | grep -v 'watchtower-upgrade' | crontab -
+crontab -l | grep -v 'unattended-upgrades' | crontab -
+crontab -l | grep -v '/opt/borg/' | crontab -
+crontab -l | grep -v '/opt/renew-vm-cert.sh' | crontab -
+crontab -l | grep -v '/opt/maintenance.sh' | crontab -
+
+##remove old logs & restart reverse proxy once per week to apply new certs
+echo 'journalctl --vacuum-time=10d --vacuum-size=500M;' > /opt/maintenance.sh
+
+echo '/opt/renew-vm-cert.sh;' >> /opt/maintenance.sh
+echo 'cd /opt/elestio/nginx && docker-compose down;' >> /opt/maintenance.sh
+echo 'cd /opt/elestio/nginx && docker-compose up -d;' >> /opt/maintenance.sh
+
+chmod +x /opt/maintenance.sh;
+crontab -l | { cat; echo "48 18 * * 0 /opt/maintenance.sh"; } | crontab -
+
+## install TTYD
+platform='amd64'
+unamestr=$(arch)
+if [[ "$unamestr" == 'aarch64' ]]; then
+    platform='arm64'
+fi
+wget -c https://api.elest.io/tools/gotty_v1.5.0_linux_$platform.tar.gz
+tar -xzf gotty_v1.5.0_linux_$platform.tar.gz -C /bin
+cp /bin/gotty /bin/gotty
+rm gotty_v1.5.0_linux_$platform.tar.gz
+
+## Start VM Monitoring
+wget -O - https://github.com/Accelerator-Team/monitoring-producer/raw/main/systemd/install.sh | bash -s -- monitoring-url="https://elestio-monitoring-backend-prod.vm.openvm.cloud" server-token="6vvWz49P-ZcY6-6TlEiO3e"
+systemctl stop monitoring-producer;
+systemctl start monitoring-producer;
+
+#Cleanup
+sudo killall dpkg;
+
+#set noninteractive mode for apt
+dpkg-reconfigure debconf --frontend=noninteractive
+
+sudo apt -y update
+dpkg --configure -a;
+
+#disable ufw
+apt remove ufw -y;
+
+#ZSTD for backups
+apt install -y zstd vnstat ncdu
+
+#Need for borg mount
+apt install -y python3-pyfuse3
+
+#FAIL2BAN & net-tools & apache2-utils & unattended-upgrades
+sudo apt install fail2ban net-tools apache2-utils unattended-upgrades update-notifier-common -y
+cat <<EOT >> /etc/fail2ban/jail.local
+[sshd]
+enabled   = true
+maxretry  = 6
+findtime  = 1h
+bantime   = 30m
+ignoreip  = 127.0.0.1/8
+EOT
+sudo systemctl enable fail2ban
+sudo systemctl restart fail2ban
+
+## Set max files descriptor open to a big value for perf
+ulimit -n 262000
+
+#generate a random root password
+rootPassword=lMyOkuwr-VqId-O5BJRbyH;
+
+#restart monitoring to ensure it's correctly started after install
+service monitoring-producer restart
+
+
+#Create maintenance daily log removing script
+echo 'echo "$(tail -c 30m /tmp/appStack.log)" > /tmp/appStack.log' >> /opt/maintenance-daily.sh
+echo 'echo "$(tail -c 30m /var/log/syslog)" > /var/log/syslog' >> /opt/maintenance-daily.sh
+echo 'journalctl --vacuum-time=10d --vacuum-size=500M;' >> /opt/maintenance-daily.sh
+chmod +x /opt/maintenance-daily.sh
+crontab -l | { cat; echo "48 17 * * * /opt/maintenance-daily.sh"; } | crontab -
+
+## INSTALL DOCKER if needed
+if which docker > /dev/null
+then
+    echo -e "Installed DOCKER version: $(docker --version)";
+else
+    echo -e "Installing DOCKER.IO ...";
+    sudo apt install -y docker.io;
+    sudo systemctl enable docker;
+    echo -e "Installed docker version: $(docker --version)";
+
+    #change docker default logging mode to journald
+    echo '{"log-driver": "journald", "live-restore": true}' > /etc/docker/daemon.json;
+    service docker restart;
+
+    #add cleaning job for docker unused images
+    echo 'docker image prune -a -f' >> /opt/maintenance.sh
+
+fi
+apt install -y docker.io;
+
+mkdir -p ~/.docker/cli-plugins/
+platform='x86_64'
+unamestr=$(arch)
+if [[ "$unamestr" == 'aarch64' ]]; then
+    platform='aarch64'
+fi
+wget -O ~/.docker/cli-plugins/docker-compose https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-$platform
+chmod +x ~/.docker/cli-plugins/docker-compose;
+grep -qxF "alias docker-compose='docker compose'" ~/.bash_profile || echo "alias docker-compose='docker compose'" >> ~/.bash_profile
+grep -qxF "alias docker-compose='docker compose'" ~/.bashrc || echo "alias docker-compose='docker compose'" >> ~/.bashrc
+alias docker-compose='docker compose'
+
+# Define the path for the wrapper script
+wrapper_script="/usr/bin/docker-compose"
+
+# Check if the wrapper script already exists
+if [ ! -f "$wrapper_script" ]; then
+    # Create the wrapper script
+cat <<EOF | sudo tee "$wrapper_script" > /dev/null
+#!/bin/bash
+
+# Pass all arguments to the 'docker compose' command
+docker compose "\$@"
+EOF
+
+    # Make the wrapper script executable
+    sudo chmod +x "$wrapper_script"
+
+    echo "Wrapper script created at $wrapper_script"
+else
+    echo "Wrapper script already exists at $wrapper_script"
+fi
+
+
+
+echo "lMyOkuwr-VqId-O5BJRbyH" > /opt/proxy_443.secret;
+
+mkdir -p /opt/app/;
+cd /opt/app/;
+
+git clone https://github.com/elestio-examples/postgres.git /opt/app
+
+#generate .env
+cat << EOT > /opt/app/.env
+SOFTWARE_VERSION_TAG=16
+SOFTWARE_PASSWORD=lMyOkuwr-VqId-O5BJRbyH
+ADMIN_EMAIL=axeemhaider@gmail.com
+ADMIN_PASSWORD=lMyOkuwr-VqId-O5BJRbyH
+CNAME=postgresql-n7imn-u21607.vm.elestio.app
+EOT
+
+chmod +x ./scripts/*.sh;
+./scripts/preInstall.sh;
+
+
+
+#Update apt
+sudo apt update
+
+#install docker if needed
+if which docker > /dev/null
+then
+    echo -e "Installed DOCKER version: $(docker --version)";
+else
+    echo -e "Installing DOCKER.IO ...";
+    sudo apt install -y docker.io;
+    sudo systemctl enable docker;
+    echo -e "Installed docker version: $(docker --version)";
+fi
+apt install -y docker.io;
+
+mkdir -p ~/.docker/cli-plugins/
+platform='x86_64'
+unamestr=$(arch)
+if [[ "$unamestr" == 'aarch64' ]]; then
+    platform='aarch64'
+fi
+wget -O ~/.docker/cli-plugins/docker-compose https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-$platform
+chmod +x ~/.docker/cli-plugins/docker-compose;
+grep -qxF "alias docker-compose='docker compose'" ~/.bash_profile || echo "alias docker-compose='docker compose'" >> ~/.bash_profile
+grep -qxF "alias docker-compose='docker compose'" ~/.bashrc || echo "alias docker-compose='docker compose'" >> ~/.bashrc
+alias docker-compose='docker compose'
+
+# Define the path for the wrapper script
+wrapper_script="/usr/bin/docker-compose"
+
+# Check if the wrapper script already exists
+if [ ! -f "$wrapper_script" ]; then
+    # Create the wrapper script
+cat <<EOF | sudo tee "$wrapper_script" > /dev/null
+#!/bin/bash
+
+# Pass all arguments to the 'docker compose' command
+docker compose "\$@"
+EOF
+
+    # Make the wrapper script executable
+    sudo chmod +x "$wrapper_script"
+
+    echo "Wrapper script created at $wrapper_script"
+else
+    echo "Wrapper script already exists at $wrapper_script"
+fi
+
+
+
+#create folder structure for nginx
+mkdir -p /opt/elestio/nginx/;
+mkdir -p /opt/elestio/nginx/conf.d;
+mkdir -p /opt/elestio/nginx/ssl_data;
+chmod 777 /opt/elestio/nginx/ssl_data;
+mkdir -p /opt/elestio/nginx/logs;
+
+cat > /opt/elestio/nginx/.env << EOF
+ALLOWED_DOMAINS=postgresql-n7imn-u21607.vm.elestio.app
+SITES=
+EOF
+
+#generate password file for basic auth
+htpasswd -b -c /opt/elestio/nginx/conf.d/.htpasswd root lMyOkuwr-VqId-O5BJRbyH
+
+cat > /opt/elestio/nginx/conf.d/postgresql-n7imn-u21607.vm.elestio.app.conf << 'EOF'
+map $http_upgrade $connection_upgrade {
+  default upgrade;
+  '' close;
+}
+
+proxy_cache_path /tmp levels=1:2 keys_zone=my_cache:10m max_size=1g inactive=60m use_temp_path=off;
+limit_req_zone $binary_remote_addr$http_x_forwarded_for zone=iprl:16m rate=500r/m;
+
+server {
+  listen 443 ssl http2;
+  ssl_certificate /etc/nginx/certs/cert.pem;
+  ssl_certificate_key /etc/nginx/certs/key.pem;
+  server_name postgresql-n7imn-u21607.vm.elestio.app;
+
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_prefer_server_ciphers on;
+  ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+
+  client_header_buffer_size 32k;
+  large_client_header_buffers 4 64k;
+
+  access_log flush=1s;
+  #access_log  /var/log/nginx/access_log;
+  #error_log /var/log/nginx/error_log;
+  
+  location / {
+
+    content_by_lua_block {
+        ngx.header['server'] = 'Elestio'
+    }
+    access_by_lua_block {
+        ngx.header['server'] = 'Elestio'
+    }
+
+    
+
+    limit_req zone=iprl burst=500 nodelay;
+    limit_req_log_level warn;
+
+    #proxy_cache_valid any 0s;
+    #add_header X-Cache-Status $upstream_cache_status;
+    #proxy_cache my_cache;
+    #proxy_ignore_headers Cache-Control;
+    #proxy_cache_methods GET HEAD;
+    #proxy_cache_bypass $cookie_nocache $arg_nocache;
+    #proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+
+    proxy_http_version 1.1;
+    proxy_pass http://172.17.0.1:8080;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Port  $server_port;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_cache_bypass $http_upgrade;
+    proxy_hide_header x-powered-by;
+
+    proxy_set_header Authorization $http_authorization;
+  }
+}
+
+EOF
+
+cat > /opt/elestio/nginx/docker-compose.yml << EOF
+version: '2'
+services:
+  nginx:
+    image: elestio/nginx-auto-ssl:latest
+    container_name: elestio-nginx
+    restart: always
+    network_mode: "host"
+    volumes:
+      - /opt/elestio/nginx/ssl_data:/etc/resty-auto-ssl
+      - /opt/elestio/nginx/conf.d:/etc/nginx/conf.d
+      - /opt/elestio/nginx/streams:/etc/nginx/streams
+      - /opt/elestio/nginx/logs:/var/log/nginx/
+      - /root/.acme.sh/vm.elestio.app/fullchain.cer:/etc/nginx/certs/cert.pem
+      - /root/.acme.sh/vm.elestio.app/vm.elestio.app.key:/etc/nginx/certs/key.pem
+    env_file:
+      - .env
+EOF
+
+
+docker-compose -f /opt/elestio/nginx/docker-compose.yml up -d
+
+
+
+#prepare nginx
+sed -i -e "/.*proxy_pass.*/a\\    proxy_ssl_verify  off;" /opt/elestio/nginx/conf.d/postgresql-n7imn-u21607.vm.elestio.app.conf
+
+
+#/opt/app/streams/tcp_udp.conf (TCP & UDP rules)
+cat << EOT > /opt/elestio/nginx/streams/postgresql-n7imn-u21607.vm.elestio.app-tcp_udp.conf
+upstream tcp {
+  least_conn;
+  server 172.17.0.1:5432;
+}
+
+server {
+  listen 25432;
+  proxy_pass tcp;
+  proxy_responses 1;
+}
+EOT
+
+
+#start the stack
+docker-compose up -d;
+./scripts/postInstall.sh;
+
+cd /opt/elestio/nginx;
+
+docker-compose down;
+docker-compose up -d;
+
+cd /opt/app;
+
+#postfix
+mkdir -p /opt/elestio/;
+docker rm postfix --force;
+echo 'docker run -d --restart always --no-healthcheck --name elestio-postfix -e RELAYHOST=internal-smtp-proxy.elestio.app:24 -e POSTFIX_smtpd_tls_security_level=none -e RELAYHOST_USERNAME=postgresql-n7imn-u21607.vm.elestio.app@vm.elestio.app -e RELAYHOST_PASSWORD=LOJQ34Yo-yDf9-1OstbnrH -e ALLOWED_SENDER_DOMAINS=vm.elestio.app -p 172.17.0.1:25:587 -e POSTFIX_myhostname=postgresql-n7imn-u21607.vm.elestio.app boky/postfix' > /opt/elestio/startPostfix.sh;
+chmod +x /opt/elestio/startPostfix.sh;
+/opt/elestio/startPostfix.sh;
+
+
+#notify user of install ready
+echo "Notify First Try";
+wget --post-data 'SRVTOKEN=6vvWz49P-ZcY6-6TlEiO3e&app_password=lMyOkuwr-VqId-O5BJRbyH&app_token=WyZjBWJu-1k4C-JPW9dHhv&domain=postgresql-n7imn-u21607.vm.elestio.app&VMID=4&template=PostgreSQL&IP='$IP'&VMSIZE=CUSTOM-2C-4G&NBCORES=2&NBRAM=4&NBGB=80' https://api.elest.io/api/servers/NotifyInstallFinished
+
+sleep 7s;
+echo "Notify second Try";
+wget --post-data 'SRVTOKEN=6vvWz49P-ZcY6-6TlEiO3e&app_password=lMyOkuwr-VqId-O5BJRbyH&app_token=WyZjBWJu-1k4C-JPW9dHhv&domain=postgresql-n7imn-u21607.vm.elestio.app&VMID=4&template=PostgreSQL&IP='$IP'&VMSIZE=CUSTOM-2C-4G&NBCORES=2&NBRAM=4&NBGB=80' https://api.elest.io/api/servers/NotifyInstallFinished
+
+sleep 7s;
+echo "Notify third Try";
+wget --post-data 'SRVTOKEN=6vvWz49P-ZcY6-6TlEiO3e&app_password=lMyOkuwr-VqId-O5BJRbyH&app_token=WyZjBWJu-1k4C-JPW9dHhv&domain=postgresql-n7imn-u21607.vm.elestio.app&VMID=4&template=PostgreSQL&IP='$IP'&VMSIZE=CUSTOM-2C-4G&NBCORES=2&NBRAM=4&NBGB=80' https://api.elest.io/api/servers/NotifyInstallFinished
+
+#enable automatic system updates once per week
+
+#create config file
+cat > /etc/apt/apt.conf.d/20auto-upgrades << 'EOF'
+APT::Periodic::Enable "1";
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Download-Upgradeable-Packages "1";
+APT::Periodic::AutocleanInterval "14";
+APT::Periodic::Unattended-Upgrade "0";
+APT::Periodic::Verbose "2";
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::SyslogEnable "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::MinimalSteps "true";
+
+Unattended-Upgrade::Allowed-Origins {
+    "${distro_id}:${distro_codename}";
+    "${distro_id}:${distro_codename}-security";
+    "${distro_id}ESMApps:${distro_codename}-apps-security";
+    "${distro_id}ESM:${distro_codename}-infra-security";
+    
+};
+EOF
+
+#restart the service
+/etc/init.d/unattended-upgrades restart
+
+#remove old cron job if exist
+crontab -l | grep -v 'unattended-upgrades' | crontab -
+
+#add cron job to do weekly a full backup then OS upgrades
+crontab -l | { cat; echo "00 5 * * 0 /opt/borg/backup.sh && unattended-upgrades -d"; } | crontab -
+
+            
+mkdir -p /opt/elestio/watchtower;
+cat > /opt/elestio/watchtower/watchtower-upgrade.sh << EOF
+( docker run --rm -v /tmp:/tmp -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower --run-once --debug;  echo "
+Your app is now updated"; sleep 60s; curl --request POST --url 'https://api.elest.io/api/servers/NotifyUpdateFinished?serverToken=6vvWz49P-ZcY6-6TlEiO3e&userID=21607' --data filePath  --header "Transfer-Encoding: chunked" ) > /tmp/lastSoftwareUpdates.log  2>&1 &
+EOF
+chmod +x /opt/elestio/watchtower/watchtower-upgrade.sh;
+sed -i 's|filePath|"$(cat /tmp/lastSoftwareUpdates.log)"|g' /opt/elestio/watchtower/watchtower-upgrade.sh
+#remove old cron job if exist
+crontab -l | grep -v 'watchtower-upgrade' | crontab -
+
+#add cron job to do weekly a full backup then containers upgrades
+crontab -l | { cat; echo "00 1 * * 0 /opt/borg/backup.sh && /opt/elestio/watchtower/watchtower-upgrade.sh"; } | crontab -
