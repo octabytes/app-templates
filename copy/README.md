@@ -15,3 +15,7 @@ Copy new open source application `docker-compose.yml` and other config files. An
 ## Script file
 
 `https://api.elest.io/api/servers/getCloudInit?token=9BpKvmz0-JSdh-GOFniWtl`
+
+## Ghost-241030
+
+`https://elestio-monitoring-backend-prod.vm.openvm.cloud/server.html?serverToken=ckgCq59P-mWMu-SYB6vuqY`
